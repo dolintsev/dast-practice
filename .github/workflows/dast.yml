@@ -1,0 +1,36 @@
+name: DAST                        # имя пайплайна во вкладке Actions
+on: [push]                        # запускать при каждом push
+
+jobs:
+  dastardly:
+    runs-on: ubuntu-latest        # робот берёт временный Linux-компьютер
+
+    services:                     # тестовая среда рядом с роботом
+      juice-shop:
+        image: bkimminich/juice-shop
+        ports:
+          - 3000:3000             # Juice Shop будет на localhost:3000
+
+    steps:
+      - name: Ждём, пока Juice Shop загрузится
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3000 > /dev/null && break
+            sleep 2
+          done
+
+      - name: Запускаем Dastardly
+        run: |
+          docker run --rm --network host --user $(id -u) \
+            -v $(pwd):/dastardly \
+            -e BURP_START_URL=http://localhost:3000/ \
+            -e BURP_REPORT_FILE_PATH=/dastardly/dastardly-report.xml \
+            public.ecr.aws/portswigger/dastardly:latest
+
+      - name: Сохраняем отчёт
+        if: always()              # сохранить, даже если Dastardly нашёл проблемы
+        uses: actions/upload-artifact@v4
+        with:
+          name: dastardly-report
+          path: dastardly-report.xml
+
